@@ -1,7 +1,7 @@
 import time
 from langchain_google_genai import ChatGoogleGenerativeAI
 import discord
-from discord.ext import tasks
+from discord.ext import commands
 from dotenv import load_dotenv
 import os
 import aiohttp
@@ -14,7 +14,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 #GUILD = os.getenv('DISCORD_GUILD')
 #intents = discord.Intents.all()
 
-discord_bot = discord.Bot(description="Omni chat bot")
+discord_bot = discord.Bot()
 base_model = BaseTextModel(model_name="gemini-1.5-pro")
 # Replaced with nosql db later
 user_histories = {}
@@ -26,7 +26,6 @@ async def on_ready():
         f'{discord_bot.user} is connected to the following guild:\n'
         f'{guild.name}(id: {guild.id})'
     )
-    keep_alive.start()
 
 @discord_bot.slash_command()
 async def general_chat(ctx, question):
@@ -40,6 +39,5 @@ async def general_chat(ctx, question):
     user_histories[user_id] = chat_history
 
     await ctx.respond(response)
-
 
 discord_bot.run(TOKEN)
