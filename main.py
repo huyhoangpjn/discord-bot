@@ -27,7 +27,7 @@ async def on_ready():
         f'{guild.name}(id: {guild.id})'
     )
 
-@discord_bot.slash_command()
+@discord_bot.slash_command(id=[1246755720561692723])
 async def general_chat(ctx, question):
     await ctx.defer()
 
