@@ -17,28 +17,44 @@ class BaseTextModel:
     def __init__(self, model_name="gemini-1.5-pro", history_window = 20):
         self.llm = ChatGoogleGenerativeAI(
             model=model_name,
-            temperature=0,
+            temperature=0.8,
             safety_settings = {
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE, 
                 HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE, 
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE, 
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            }
+            },
+            timeout=5,
         )
         self.history_window = history_window
 
     def history_cut_off(self, chat_history):
         '''
-            Cut off the 2 oldest messages (1 bot, 1 human)
+            Cut off some oldest messages
         '''
         
-        return chat_history[2:] if len(chat_history) > self.history_window else chat_history
+        return chat_history[len(chat_history)-self.history_window:] if len(chat_history) > self.history_window else chat_history
 
     @staticmethod
     def update_chat_history(chat_history, query, response):
         chat_history.append(("human", query))
         chat_history.append(("human", response))
         return chat_history
+
+    #Implement using langgraph
+    def detect_link_in_query(self, state):
+        pass
+    def process_link(self, state):
+        ''' 
+        Process text only, after imgs, videos and save to chat_history with system message,
+        for e.g., sys: you are given some additional context: {processed data from that link}
+        '''
+        pass
+    def generate(self, state):
+        '''
+            in: query, chat_history
+        '''
+        pass
 
     def invoke(self, query, chat_history):
         '''
