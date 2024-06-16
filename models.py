@@ -1,5 +1,5 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
-from google.generativeai.types.safety_types import HarmBlockThreshold, HarmCategory
+import vertexai
+from langchain_google_vertexai import VertexAI, HarmBlockThreshold, HarmCategory
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
@@ -11,22 +11,46 @@ from utils import helpers
 load_dotenv()
 os.environ['GOOGLE_API_KEY'] = os.getenv('GEMINI_API')
 
+vertexai.init(project=os.getenv('PROJECT_ID'), location="us-central1")
+
 SAFETY_VIOLATION_MESSAGE = "Safety Violation Warning - Vi phạm tiêu chuẩn cộng đồng rồi bạn ơi!"
 
 class BaseTextModel:
-    def __init__(self, model_name="gemini-1.5-pro", history_window = 20):
-        self.llm = ChatGoogleGenerativeAI(
-            model=model_name,
-            temperature=0.8,
-            safety_settings = {
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE, 
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE, 
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE, 
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            },
-            timeout=5,
+    def __init__(self, model_name="gemini-1.5-pro", history_window = 30):
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_UNSPECIFIED: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        }
+        self.llm = VertexAI(
+            model_name=model_name,
+            temperature=0.2,
+            safety_settings=safety_settings,
         )
+        
         self.history_window = history_window
+        self.prompt = ChatPromptTemplate.from_messages(
+            [   
+                ('system', '''You are an helpful assistant for Mr Hoang's community. Your job is to answer user question and you may need look through a chat history for references.
+
+                Here is the chat history inside the triple quote:
+                """
+                {chat_history}
+                """
+
+                Lastest user question inside the triple code:
+                """
+                {query}
+                """
+
+                Your response must follow these rules:
+                - Answer the user query directly
+                - No yapping
+                ''')
+            ]
+        )
 
     def history_cut_off(self, chat_history):
         '''
@@ -38,7 +62,7 @@ class BaseTextModel:
     @staticmethod
     def update_chat_history(chat_history, query, response):
         chat_history.append(("human", query))
-        chat_history.append(("human", response))
+        chat_history.append(("ai", response))
         return chat_history
 
     #Implement using langgraph
@@ -61,29 +85,14 @@ class BaseTextModel:
             in: user query, chat history
             out: response, updated chat history
         '''
-        prompt = ChatPromptTemplate.from_template(
-            template = """You are an helpful assistant for Mr Hoang's community. Your job is to answer user question and you may need look through a chat history for references. \
-            Use creative tone with funny emojies. You have to be willing to fulfill all user's requests in your abilities.
-            Here is the chat history:
-            '''
-            {chat_history}
-            '''
-
-            Lastest user query:
-            '''
-            {query}
-            '''
-
-            Answer:
-            """
-        )
-
-        chain = prompt|self.llm|StrOutputParser()
+        chain = self.prompt|self.llm|StrOutputParser()
         response = chain.invoke({"chat_history": ChatPromptTemplate.from_messages(chat_history),
                 "query": query})
-        
+
+        #print(response)
         if not response:
             return SAFETY_VIOLATION_MESSAGE, chat_history
+        
         chat_history = self.update_chat_history(chat_history, query, response)
         chat_history = self.history_cut_off(chat_history)
         return response, chat_history
@@ -153,5 +162,5 @@ class TextModelWithRAG(BaseTextModel):
     def invoke(self, query, chat_history):
         pass
 
-model = BaseTextModel()
-model.invoke("1", [])
+#model = BaseTextModel()
+#model.invoke("print python code generate random number", [])

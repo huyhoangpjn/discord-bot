@@ -1,3 +1,5 @@
 langchain-google-genai
 langchain
+langgraph
+langchain_google_vertexai
 py-cord

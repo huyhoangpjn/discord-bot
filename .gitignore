@@ -1,3 +1,4 @@
 .lightning_studio
 __pycache__
 .env
+.config

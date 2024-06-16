@@ -4,7 +4,8 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import os
-import aiohttp
+from utils import helpers
+import asyncio
 
 from models import BaseTextModel
 
@@ -38,6 +39,17 @@ async def general_chat(ctx, question):
     response, chat_history = base_model.invoke(question, user_histories[user_id])
     user_histories[user_id] = chat_history
 
-    await ctx.respond(response)
+    split_response = helpers.split_message(response)
+    for message in split_response:
+        # This will ensure if user prompts something having no line break
+        if len(message) > 2000:
+            await ctx.respond("Response exceeds 2000 characters")
+            break
+        else:
+            await ctx.respond(message)
 
 discord_bot.run(TOKEN)
+
+# Task can giai quyet:
+# Too long response
+# satety failed - ok (time out)
