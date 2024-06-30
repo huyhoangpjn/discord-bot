@@ -1,0 +1,20 @@
+# Available models that can be used
+flagship-models:
+  anthropic: "anthropic/claude-3.5-sonnet:beta"
+  open-ai: "openai/gpt-4o"
+  google: "google/gemini-pro-1.5"
+  
+open-source-models:
+  meta: "meta-llama/llama-3-70b-instruct"
+  gryphe: "gryphe/mythomax-l2-13b"
+  deepseek: "deepseek/deepseek-coder"
+
+# Choose models based on category
+category:
+  programming: "deepseek/deepseek-coder"
+  mathematics: "deepseek/deepseek-coder"
+  roleplay: "gryphe/mythomax-l2-13b"
+  marketing: "meta-llama/llama-3-70b-instruct"
+  science: "openai/gpt-4o"
+  translation: "google/gemini-pro-1.5"
+  other: "anthropic/claude-3.5-sonnet:beta"

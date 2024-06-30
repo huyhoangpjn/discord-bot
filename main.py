@@ -10,13 +10,13 @@ import asyncio
 from models import BaseTextModel
 
 load_dotenv()
-os.environ['GOOGLE_API_KEY'] = os.getenv('GEMINI_API')
+
 TOKEN = os.getenv('DISCORD_TOKEN')
 #GUILD = os.getenv('DISCORD_GUILD')
 #intents = discord.Intents.all()
 
 discord_bot = discord.Bot()
-base_model = BaseTextModel(model_name="gemini-1.5-pro")
+base_model = BaseTextModel()
 # Replaced with nosql db later
 user_histories = {}
 

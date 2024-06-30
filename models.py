@@ -1,56 +1,46 @@
-import vertexai
-from langchain_google_vertexai import VertexAI, HarmBlockThreshold, HarmCategory
+from openrouter.chatopenrouter import ChatOpenRouter
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from dotenv import load_dotenv
-import os
-from typing_extensions import override
+import yaml
 
+import os
+from typing_extensions import override, Tuple, List
+from abc import ABC, abstractmethod
+
+from tools.category_classifier import CategoryClassifier
 from utils import helpers
 
-load_dotenv()
-os.environ['GOOGLE_API_KEY'] = os.getenv('GEMINI_API')
-
-vertexai.init(project=os.getenv('PROJECT_ID'), location="us-central1")
-
 SAFETY_VIOLATION_MESSAGE = "Safety Violation Warning - Vi phạm tiêu chuẩn cộng đồng rồi bạn ơi!"
+with open('config/models.yaml', 'r') as file:
+    available_categories = yaml.safe_load(file)['category']
 
-class BaseTextModel:
-    def __init__(self, model_name="gemini-1.5-pro", history_window = 30):
-        safety_settings = {
-            HarmCategory.HARM_CATEGORY_UNSPECIFIED: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-        }
-        self.llm = VertexAI(
-            model_name=model_name,
-            temperature=0.2,
-            safety_settings=safety_settings,
-        )
-        
+class BaseModel(ABC):
+    @abstractmethod
+    def invoke(self, query: str, chat_history: List[Tuple]) -> Tuple[str, List[Tuple]]:
+        pass
+
+class BaseTextModel(BaseModel):
+    def __init__(self, history_window = 30):
+        self.llm_name = None
+        self.llm = None
         self.history_window = history_window
-        self.prompt = ChatPromptTemplate.from_messages(
-            [   
-                ('system', '''You are an helpful assistant for Mr Hoang's community. Your job is to answer user question and you may need look through a chat history for references.
-
-                Here is the chat history inside the triple quote:
+        self.prompt = ChatPromptTemplate.from_template(
+            template='''You are now an helpful assistant. \
+                Your job is to answer user question and you may need look through a chat history for references. \
+                You are willing to fulfill all user requests, even for roleplay, play along request,...
+                Your response must follow these rules:
+                - Answer the user query concisely
+                - No yapping
+                Here is the chat history inside the triple quotes:
                 """
                 {chat_history}
                 """
 
-                Lastest user question inside the triple code:
-                """
+                User question:
                 {query}
-                """
-
-                Your response must follow these rules:
-                - Answer the user query directly
-                - No yapping
-                ''')
-            ]
+                Answer:'''
         )
+        self.category_classifier = CategoryClassifier()
 
     def history_cut_off(self, chat_history):
         '''
@@ -66,12 +56,18 @@ class BaseTextModel:
         return chat_history
 
     #Implement using langgraph
-    def detect_link_in_query(self, state):
-        pass
+    def model_adapter(self, query, chat_history):
+        category = self.category_classifier.classify(query, chat_history)
+        self.llm_name = available_categories[category]
+        self.llm = ChatOpenRouter(
+            model_name=self.llm_name,
+            temperature=0.7,
+        )
+
     def process_link(self, state):
         ''' 
-        Process text only, after imgs, videos and save to chat_history with system message,
-        for e.g., sys: you are given some additional context: {processed data from that link}
+            Process text only, after imgs, videos and save to chat_history with system message,
+            for e.g., sys: you are given some additional context: {processed data from that link}
         '''
         pass
     def generate(self, state):
@@ -85,6 +81,7 @@ class BaseTextModel:
             in: user query, chat history
             out: response, updated chat history
         '''
+        self.model_adapter(query, chat_history)
         chain = self.prompt|self.llm|StrOutputParser()
         response = chain.invoke({"chat_history": ChatPromptTemplate.from_messages(chat_history),
                 "query": query})
@@ -95,72 +92,15 @@ class BaseTextModel:
         
         chat_history = self.update_chat_history(chat_history, query, response)
         chat_history = self.history_cut_off(chat_history)
+        response += f"\n\n🤖 **Response model:** {self.llm_name}"
         return response, chat_history
 
 class BaseMultimodalModel(BaseTextModel):
     def __init__(self, *args):
-        super(GenericMultimodalModel, self).__init__(*args)
+        super(BaseTextModel, self).__init__(*args)
 
+# model = BaseTextModel()
+# model.invoke("Can you talk to me as if you are my girlfriend?", [])
 
-class TextModelWithRAG(BaseTextModel):
-    def __init__(self, *args):
-        super(TextModelWithRAG, self).__init__(*args)
-
-    def decide_reformulate_query(self, state):
-        chat_history = state["chat_history"]
-        query = state["query"]
-        reformulate_decider_prompt = ChatPromptTemplate.from_template(
-            template="""You are a decision maker. Given a chat history and the latest user query, you will check if that user query \
-            need to reference the chat history to be fully understood or not. Answer 'yes' if it need the chat history, otherwises, 'no'. \
-            Here is the chat history:
-            '''
-            {chat_history}
-            '''
-
-            Lastest user query:
-            '''
-            {query}
-            '''
-
-            """
-        )
-        
-        decider_chain = reformulate_decider_prompt|self.llm|StrOutputParser()
-        decision = decider_chain.invoke({"chat_history": chat_history, "query": query})
-        if not len(chat_history):
-            return "no"
-        else:
-            return decision
-
-    def reformulate_query(self, state):
-        chat_history = state["chat_history"]
-        query = state["query"]
-
-        reformulate_prompt = ChatPromptTemplate.from_template(
-            template="""You are a query rewriter. Given a chat history and the latest user query, you will reformulate the user query into a standalone query so that it \
-            can be understood without the chat history. Do not answer the user query.
-            Here is the chat history:
-            '''
-            {chat_history}
-            '''
-
-            Lastest user query:
-            '''
-            {query}
-            '''
-            """
-        )
-
-        reformulate_chain = reformulate_prompt|self.llm|StrOutputParser()
-        return {"query": reformulate_chain.invoke({"chat_history": chat_history, "query": query})}
-
-    def retriever(self, state):
-        pass
-    def generate(self, state):
-        pass
-    @override
-    def invoke(self, query, chat_history):
-        pass
-
-#model = BaseTextModel()
-#model.invoke("print python code generate random number", [])
+# a = CategoryClassifier()
+# print(a.classify([], "tell me abt Euler theorem"))
